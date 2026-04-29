@@ -1,0 +1,258 @@
+📄 TECHNICAL REQUIREMENTS DOCUMENT (TRD)
+🏦 System: Playto Payout Engine (Minimal Production Design)
+1. 🧩 System Overview
+
+The Playto Payout Engine is a transaction-safe backend system that:
+
+Maintains merchant balances using a ledger model
+Processes payout requests with strong consistency guarantees
+Ensures idempotent API behavior
+Handles concurrent payout requests safely
+Processes payouts asynchronously via a background worker
+2. 🏗️ System Architecture
+Frontend (React)
+       ↓
+Django REST API
+       ↓
+PostgreSQL Database
+       ↓
+Background Worker (Django-Q)
+3. ⚙️ Technology Stack
+Layer	Technology
+Backend	Django + Django REST Framework
+Database	PostgreSQL
+Background Jobs	Django-Q (ORM-based queue)
+Frontend	React + Tailwind
+
+👉 No Redis used (kept minimal by design)
+
+4. 🗃️ Database Design
+4.1 Merchant Table
+id (Primary Key)
+name (VARCHAR)
+created_at (TIMESTAMP)
+4.2 LedgerEntry Table
+id (Primary Key)
+merchant_id (Foreign Key)
+type (ENUM: credit, debit)
+amount_paise (BIGINT)
+reference_id (nullable, payout reference)
+created_at (TIMESTAMP)
+
+👉 Index:
+
+(merchant_id, created_at)
+4.3 Payout Table
+id (Primary Key)
+merchant_id (Foreign Key)
+amount_paise (BIGINT)
+status (ENUM: pending, processing, completed, failed)
+retry_count (INT DEFAULT 0)
+idempotency_key (VARCHAR)
+created_at (TIMESTAMP)
+updated_at (TIMESTAMP)
+
+👉 Index:
+
+(merchant_id, status)
+4.4 Idempotency Table
+id (Primary Key)
+merchant_id (Foreign Key)
+key (VARCHAR)
+response (JSON)
+created_at (TIMESTAMP)
+expires_at (TIMESTAMP)
+
+👉 Constraint:
+
+UNIQUE (merchant_id, key)
+5. 💰 Ledger Computation
+
+Balance is computed using database aggregation:
+
+SELECT 
+  COALESCE(SUM(CASE WHEN type='credit' THEN amount_paise END), 0)
+  -
+  COALESCE(SUM(CASE WHEN type='debit' THEN amount_paise END), 0)
+AS balance
+FROM ledger_entry
+WHERE merchant_id = :merchant_id;
+Key Guarantees:
+No floating point errors
+Always consistent with transaction history
+Source of truth = ledger
+6. 🔒 Concurrency Control
+Problem:
+
+Two concurrent payout requests may overdraft balance.
+
+Solution: Row-Level Locking
+from django.db import transaction
+
+with transaction.atomic():
+    merchant = Merchant.objects.select_for_update().get(id=merchant_id)
+
+    balance = get_balance(merchant_id)
+
+    if balance < amount:
+        raise InsufficientBalanceException()
+
+    payout = create_payout()
+    create_ledger_debit()
+Mechanism:
+SELECT FOR UPDATE locks the merchant row
+Ensures serialized access to balance check
+7. 🔁 Idempotency Handling
+Flow:
+Check if key exists:
+record = Idempotency.objects.filter(
+    merchant=merchant,
+    key=idempotency_key
+).first()
+If exists:
+Return stored response
+If not:
+Process request
+Store response
+Race Condition Handling:
+Use DB constraint (merchant_id, key)
+Wrap in transaction.atomic()
+On duplicate insert → fetch existing response
+8. 🔄 Payout State Machine
+Allowed Transitions:
+Current	Next
+pending	processing
+processing	completed
+processing	failed
+Enforcement:
+def transition(payout, new_state):
+    allowed = {
+        "pending": ["processing"],
+        "processing": ["completed", "failed"]
+    }
+
+    if new_state not in allowed.get(payout.status, []):
+        raise Exception("Invalid state transition")
+
+    payout.status = new_state
+    payout.save()
+9. 🔁 Background Worker Design
+Worker Type:
+Django-Q async task
+Processing Flow:
+def process_payout(payout_id):
+    payout = get_payout(payout_id)
+
+    transition(payout, "processing")
+
+    result = simulate_bank_response()
+
+    if result == "success":
+        transition(payout, "completed")
+
+    elif result == "failure":
+        handle_failure(payout)
+
+    else:
+        handle_retry(payout)
+Bank Simulation:
+import random
+
+r = random.random()
+
+if r < 0.7:
+    return "success"
+elif r < 0.9:
+    return "failure"
+else:
+    return "stuck"
+10. 💥 Retry Mechanism
+Trigger:
+payout.status = processing
+elapsed_time > 30 seconds
+Logic:
+if payout.retry_count < 3:
+    payout.retry_count += 1
+    schedule_retry(delay=2 ** payout.retry_count)
+else:
+    mark_failed(payout)
+    refund(payout)
+11. 💸 Refund Handling
+Atomic Refund:
+from django.db import transaction
+
+with transaction.atomic():
+    transition(payout, "failed")
+
+    LedgerEntry.objects.create(
+        merchant=payout.merchant,
+        type="credit",
+        amount_paise=payout.amount_paise
+    )
+12. 🔐 API Design
+12.1 POST /api/v1/payouts
+Headers:
+Idempotency-Key: UUID
+Steps:
+Validate request
+Check idempotency
+Lock merchant row
+Compute balance
+Create payout
+Create ledger debit
+Store response
+Return response
+12.2 GET /api/v1/balance
+{
+  "available_balance": 5000,
+  "held_balance": 2000
+}
+12.3 GET /api/v1/payouts
+Returns payout history
+13. 🧪 Testing Strategy
+Concurrency Test
+Send parallel payout requests
+Assert:
+Only one succeeds
+One fails
+Idempotency Test
+Send same request twice
+Assert:
+Same response
+Single payout created
+14. ⚠️ Failure Handling
+Scenario	Handling
+DB failure	Transaction rollback
+Duplicate request	Idempotency
+Worker crash	Retry
+Stuck payout	Retry mechanism
+15. 🚀 Deployment Plan
+Backend: Render / Railway
+Database: PostgreSQL
+Worker: Django-Q process
+Frontend: Vercel
+16. 🔍 Observability (Optional)
+Logging:
+payout creation
+state transitions
+Metrics:
+success rate
+failure rate
+17. 🧠 Key Design Decisions
+Ledger-based system
+Ensures auditability
+Prevents inconsistency
+DB-level locking
+Prevents race conditions
+Works across distributed systems
+Async processing
+Simulates real bank delays
+Improves system reliability
+🚀 Final Note
+
+This TRD demonstrates:
+
+Strong database understanding
+Concurrency handling
+Real-world backend design
+Failure-safe architecture

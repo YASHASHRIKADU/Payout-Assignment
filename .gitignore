@@ -1,0 +1,96 @@
+# ============================================================
+# PAYOUT ASSIGNMENT — .gitignore
+# Covers: Django backend + React/Vite frontend
+# ============================================================
+
+# ── CRITICAL: Secrets & Credentials ────────────────────────
+.env
+.env.*
+!.env.example        # allow a template (no real values)
+*.pem
+*.key
+*.p12
+*.pfx
+
+# ── Python ──────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.installed.cfg
+MANIFEST
+
+# ── Virtual Environments ────────────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+.env/
+
+# ── Django ──────────────────────────────────────────────────
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+static_root/
+
+# ── Django Migrations (keep, but ignore compiled cache) ─────
+# migrations/ is intentionally NOT ignored — keep migration files
+
+# ── Pytest / Coverage ───────────────────────────────────────
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+nosetests.xml
+
+# ── Node / npm ──────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# ── Vite / React Build Artifacts ────────────────────────────
+frontend/dist/
+frontend/build/
+frontend/.vite/
+
+# ── TypeScript ──────────────────────────────────────────────
+*.tsbuildinfo
+
+# ── OS / Editor Junk ────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+Desktop.ini
+
+# ── IDEs ────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+*.swo
+
+# ── Jupyter / IPython ───────────────────────────────────────
+.ipynb_checkpoints
+
+# ── Mypy / Pylint ───────────────────────────────────────────
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pylint.d/
