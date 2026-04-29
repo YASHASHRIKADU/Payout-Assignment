@@ -16,8 +16,14 @@ export function usePayouts(merchantId, intervalMs = 5000) {
     setLoading(true)
     try {
       const res = await getPayouts(merchantId)
-      setPayouts(res.data)
-      setError(null)
+      const data = res.data?.results || res.data
+      if (Array.isArray(data)) {
+        setPayouts(data)
+        setError(null)
+      } else {
+        setPayouts([])
+        setError('Backend did not return an array.')
+      }
     } catch (err) {
       setError(err?.response?.data?.error || 'Failed to load payouts')
     } finally {

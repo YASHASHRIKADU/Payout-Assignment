@@ -10,8 +10,15 @@ export function useMerchants() {
     setLoading(true)
     try {
       const res = await getMerchants()
-      setMerchants(res.data)
-      setError(null)
+      // If the API returns an object (like a paginated response) or HTML, handle it safely
+      const data = res.data?.results || res.data
+      if (Array.isArray(data)) {
+        setMerchants(data)
+        setError(null)
+      } else {
+        setMerchants([])
+        setError('Backend did not return an array. Check VITE_API_BASE_URL.')
+      }
     } catch (err) {
       setError(err?.response?.data?.error || 'Failed to load merchants')
     } finally {
