@@ -39,6 +39,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",  # serve static files on Render
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -126,10 +127,14 @@ REST_FRAMEWORK = {
 # ---------------------------------------------------------------------------
 # CORS
 # ---------------------------------------------------------------------------
+_cors_extra = os.getenv("CORS_ALLOWED_ORIGINS", "")  # comma-separated production URLs
+_cors_extra_list = [u.strip() for u in _cors_extra.split(",") if u.strip()]
+
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-]
+] + _cors_extra_list
+
 CORS_ALLOW_HEADERS = [
     "content-type",
     "authorization",
@@ -156,7 +161,9 @@ USE_I18N = True
 USE_TZ = True
 
 # ---------------------------------------------------------------------------
-# Static files
+# Static files (WhiteNoise serves these on Render)
 # ---------------------------------------------------------------------------
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
